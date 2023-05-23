@@ -9,6 +9,7 @@ use crate::{ProofOptions, TraceInfo, TraceLayout};
 use core::cmp;
 use crypto::Hasher;
 use fri::FriProof;
+use math::log2;
 use utils::{
     collections::Vec, ByteReader, Deserializable, DeserializationError, Serializable, SliceReader,
 };
@@ -56,9 +57,11 @@ pub struct StarkProof {
     /// Decommitments of extended execution trace values (for all trace segments) at position
     ///  queried by the verifier.
     pub trace_queries: Vec<Queries>,
+    pub trace1_queries: Vec<Queries>,
     /// Decommitments of constraint composition polynomial evaluations at positions queried by
     /// the verifier.
     pub constraint_queries: Queries,
+    pub constraint_queries1: Queries,
     /// Trace and constraint polynomial evaluations at an out-of-domain point.
     pub ood_frame: OodFrame,
     /// Low-degree proof for a DEEP composition polynomial.
@@ -133,7 +136,9 @@ impl StarkProof {
         self.context.write_into(&mut result);
         self.commitments.write_into(&mut result);
         self.trace_queries.write_into(&mut result);
+        self.trace1_queries.write_into(&mut result);
         self.constraint_queries.write_into(&mut result);
+        self.constraint_queries1.write_into(&mut result);
         self.ood_frame.write_into(&mut result);
         self.fri_proof.write_into(&mut result);
         result.extend_from_slice(&self.pow_nonce.to_le_bytes());
@@ -165,6 +170,7 @@ impl StarkProof {
             context,
             commitments,
             trace_queries,
+            trace1_queries,
             constraint_queries: Queries::read_from(&mut source)?,
             ood_frame: OodFrame::read_from(&mut source)?,
             fri_proof: FriProof::read_from(&mut source)?,
@@ -192,7 +198,7 @@ fn get_conjectured_security(
     let field_security = field_size - trace_domain_size.trailing_zeros();
 
     // compute security we get by executing multiple query rounds
-    let security_per_query = options.blowup_factor().ilog2();
+    let security_per_query = log2(options.blowup_factor());
     let mut query_security = security_per_query * options.num_queries() as u32;
 
     // include grinding factor contributions only for proofs adequate security
@@ -215,7 +221,7 @@ fn get_proven_security(
     collision_resistance: u32,
 ) -> u32 {
     let extension_field_bits = (base_field_bits * options.field_extension().degree()) as f64;
-    let blowup_bits = options.blowup_factor().ilog2() as f64;
+    let blowup_bits = log2(options.blowup_factor()) as f64;
     let num_fri_queries = options.num_queries() as f64;
     let lde_size_bits = lde_domain_size.trailing_zeros() as f64;
 
